@@ -187,15 +187,6 @@ Three models were compared in `model_selection.py` using 5-fold cross-validation
 | F1 (fraud)         | 0.262  |
 | Decision threshold | 0.381  |
 
-### Business impact (per 3,084 claims)
-
-| Item                          | Value       |
-|-------------------------------|-------------|
-| Fraud caught (125 × $15,000)  | $1,875,000  |
-| Fraud missed (60 × $15,000)   | $900,000    |
-| Investigation cost (784 × $200) | $156,800  |
-| **Net benefit**               | **$1,718,200** |
-
 ---
 
 ## Key design decisions
