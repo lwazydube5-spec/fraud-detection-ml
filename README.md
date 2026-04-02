@@ -1,3 +1,4 @@
+![CI](https://github.com/lwazydube5-spec/fraud-detection-ml/actions/workflows/ci.yml/badge.svg)
 # Insurance Fraud Detection — Production ML System
 
 An end-to-end machine learning system that detects fraudulent insurance
