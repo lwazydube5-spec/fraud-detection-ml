@@ -28,6 +28,54 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt pytest pytest-cov
 
+      - name: Create sample data for CI
+        run: |
+          python - <<'EOF'
+          import pandas as pd
+          import numpy as np
+          import os
+          os.makedirs('data', exist_ok=True)
+          np.random.seed(42)
+          n = 500
+          df = pd.DataFrame({
+              'Month': np.random.choice(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], n),
+              'WeekOfMonth': np.random.randint(1, 6, n),
+              'DayOfWeek': np.random.choice(['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'], n),
+              'Make': np.random.choice(['Honda','Toyota','Ford','BMW','Chevrolet','Dodge','Mazda','Nisson','Pontiac','Saab','Saturn','VW','Accura','Lexus','Mercury','Porche','Jaguar','Mecedes','Ferrari'], n),
+              'AccidentArea': np.random.choice(['Urban','Rural'], n),
+              'DayOfWeekClaimed': np.random.choice(['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday','0'], n),
+              'MonthClaimed': np.random.choice(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','0'], n),
+              'WeekOfMonthClaimed': np.random.randint(1, 6, n),
+              'Sex': np.random.choice(['Male','Female'], n),
+              'MaritalStatus': np.random.choice(['Single','Married','Divorced','Widow'], n),
+              'Age': np.random.randint(0, 80, n),
+              'Fault': np.random.choice(['Policy Holder','Third Party'], n),
+              'PolicyType': np.random.choice(['Sedan - All Perils','Sedan - Collision','Sedan - Liability','Sport - All Perils','Sport - Collision','Sport - Liability','Utility - All Perils','Utility - Collision','Utility - Liability'], n),
+              'VehicleCategory': np.random.choice(['Sedan','Sport','Utility'], n),
+              'VehiclePrice': np.random.choice(['less than 20000','20000 to 29000','30000 to 39000','40000 to 59000','60000 to 69000','more than 69000'], n),
+              'FraudFound_P': np.random.choice([0, 1], n, p=[0.94, 0.06]),
+              'PolicyNumber': np.random.randint(100000, 999999, n),
+              'RepNumber': np.random.randint(1, 20, n),
+              'Deductible': np.random.choice([300, 400, 500, 700], n),
+              'DriverRating': np.random.randint(1, 5, n),
+              'Days_Policy_Accident': np.random.choice(['none','1 to 7','8 to 15','15 to 30','more than 30'], n),
+              'Days_Policy_Claim': np.random.choice(['none','8 to 15','15 to 30','more than 30'], n),
+              'PastNumberOfClaims': np.random.choice(['none','1','2 to 4','more than 4'], n),
+              'AgeOfVehicle': np.random.choice(['new','2 years','3 years','4 years','5 years','6 years','7 years','more than 7'], n),
+              'AgeOfPolicyHolder': np.random.choice(['16 to 17','18 to 20','21 to 25','26 to 30','31 to 35','36 to 40','41 to 50','51 to 65','over 65'], n),
+              'PoliceReportFiled': np.random.choice(['Yes','No'], n),
+              'WitnessPresent': np.random.choice(['Yes','No'], n),
+              'AgentType': np.random.choice(['Internal','External'], n),
+              'NumberOfSuppliments': np.random.choice(['none','1 to 2','3 to 5','more than 5'], n),
+              'AddressChange_Claim': np.random.choice(['no change','under 6 months','1 year','2 to 3 years','4 to 8 years'], n),
+              'NumberOfCars': np.random.choice(['1 vehicle','2 vehicles','3 to 4','5 to 8','more than 8'], n),
+              'Year': np.random.choice([1994, 1995, 1996], n),
+              'BasePolicy': np.random.choice(['All Perils','Collision','Liability'], n),
+          })
+          df.to_csv('data/fraud_data.csv', index=False)
+          print(f"Created sample data: {df.shape}")
+          EOF
+
       - name: Train model for tests
         run: python src/train.py
 
