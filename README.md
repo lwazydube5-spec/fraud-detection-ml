@@ -256,3 +256,14 @@ the training fraud rate (5.99%).
 
 **Retrain on new data** — re-run `src/train.py`. The fixed
 `KNOWN_CATEGORIES` ensures backward-compatible feature schema.
+
+## Screenshots
+
+### API running locally
+![API running locally](screenshots/API%20running%20locally.png)
+
+### Docker container running
+![Docker container running](screenshots/Docker%20container%20running.png)
+
+### SageMaker endpoint InService
+![SageMaker endpoint InService](screenshots/SageMaker%20endpoint%20InService.png)
