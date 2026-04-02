@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Data — too large for git
+data/
+
+# Model artifacts — regenerate with python src/train.py
+models/fraud_model.pkl
+models/model_meta.json
+models/evaluation_report.json
+
+# Test files
+claim.json
+response.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.pytest_cache/
+.coverage
