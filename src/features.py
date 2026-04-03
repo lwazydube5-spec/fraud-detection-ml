@@ -178,7 +178,14 @@ class FraudFeatureEngineer(BaseEstimator, TransformerMixin):
             ).astype(int)
 
         if "PastNumberOfClaims" in df.columns and "AgeOfVehicle" in df.columns:
-            df["Claims_x_VehicleAge"] = df["PastNumberOfClaims"] * df["AgeOfVehicle"]
+            # Flag the genuinely suspicious combination:
+            # multiple past claims on a new or nearly new vehicle.
+            # Multiplication was wrong here — high × high = old vehicle with many claims
+            # which is actually normal. This binary flag targets exactly what we want.
+            df["HighClaims_NewVehicle"] = (
+                (df["PastNumberOfClaims"] >= 2) &  # 2 maps to "2 to 4" claims
+                (df["AgeOfVehicle"] <= 1)           # 0=new, 1=2 years old
+            ).astype(int)
 
         if "AddressChange_Claim" in df.columns and "Days_Policy_Claim" in df.columns:
             df["AddressChange_x_QuickClaim"] = (
