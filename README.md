@@ -2,7 +2,7 @@
 # Insurance Fraud Detection — Production ML System
 
 An end-to-end machine learning system that detects fraudulent insurance
-claims in real time. Built with Python, scikit-learn, XGBoost, FastAPI,
+claims in real time. Built with Python, scikit-learn, Random Forest, FastAPI,
 and Docker.
 
 ---
@@ -65,7 +65,7 @@ The dataset is available on [Kaggle — Vehicle Insurance Fraud Detection](https
 # Step 1 — compare models (Logistic Regression, Random Forest, XGBoost)
 python src/model_selection.py
 
-# Step 2 — train the winning model (XGBoost) and save the pipeline
+# Step 2 — train the winning model (Random Forest) and save the pipeline
 python src/train.py
 
 # Step 3 — evaluate on holdout test set
@@ -149,7 +149,7 @@ print(response.json())
   "fraud_predicted": false,
   "risk_tier": "MEDIUM",
   "confidence": "MEDIUM",
-  "model_version": "XGBClassifier",
+  "model_version": "RandomForestClassifier",
   "inference_ms": 4.2
 }
 ```
@@ -169,52 +169,70 @@ print(response.json())
 
 Three models were compared in `model_selection.py` using 5-fold cross-validation:
 
-| Model               | ROC-AUC | Avg Precision | Recall | F1    |
-|---------------------|---------|---------------|--------|-------|
-| **XGBoost**         | **0.820** | **0.204**   | **67.6%** | **0.262** |
-| Random Forest       | 0.808   | 0.182         | 65.9%  | 0.248 |
-| Logistic Regression | 0.794   | 0.160         | 54.1%  | 0.243 |
+| Model               | ROC-AUC | Recall | F1    |
+|---------------------|---------|--------|-------|
+| **Random Forest**   | **0.806** | **95.6%** | **0.223** |
+| XGBoost             | 0.812   | 72.5%  | 0.240 |
+| Logistic Regression | 0.793   | 93.0%  | 0.214 |
 
-**XGBoost selected** — best on all metrics.
+**Random Forest selected** — highest recall on the fraud class.
+Threshold hardcoded at 0.30 based on cost-benefit analysis:
+catching fraud saves $15,000 per case vs $200 per false alarm investigation.
 
 ### Holdout test set results (n = 3,084)
 
-| Metric             | Value  |
-|--------------------|--------|
-| ROC-AUC            | 0.820  |
-| Average Precision  | 0.204  |
-| Recall (fraud)     | 67.6%  |
-| Precision (fraud)  | 16.1%  |
-| F1 (fraud)         | 0.262  |
-| Decision threshold | 0.381  |
+### Cross-validated OOF results (n = 15,420)
 
+| Metric             | Value   |
+|--------------------|---------|
+| ROC-AUC            | 0.806   |
+| Average Precision  | 0.178   |
+| Recall (fraud)     | 95.6%   |
+| Precision (fraud)  | 12.7%   |
+| F1 (fraud)         | 0.223   |
+| Decision threshold | 0.30 (hardcoded) |
+| Fraud caught       | 882 / 923 |
+| False alarms       | 6,084   |
+
+**Business impact per 15,420 claims:**
+
+| Item                              | Value        |
+|-----------------------------------|--------------|
+| Fraud prevented (882 × $15,000)   | $13,230,000  |
+| Investigation cost (6,084 × $200) | $1,216,800   |
+| **Net benefit**                   | **$12,013,200** |
 ---
 
 ## Key design decisions
 
-**XGBoost over Random Forest** — XGBoost builds trees sequentially, each
-correcting the previous one's errors. It outperforms Random Forest on
-ROC-AUC, Average Precision, and Recall on this dataset.
+**Random Forest over XGBoost** — at threshold 0.30 Random Forest achieves
+95.6% recall vs 72.5% for XGBoost. Since recall is the priority metric in
+fraud detection — missing fraud costs $15,000 vs $200 for a false alarm —
+Random Forest was selected despite XGBoost having a marginally higher ROC-AUC.
 
-**scale_pos_weight = 15** — The dataset has a 15:1 class ratio (legit:fraud).
-This parameter tells XGBoost to weight fraud cases 15× more heavily during
-training, handling the imbalance without oversampling.
+**Hardcoded threshold at 0.30** — rather than tuning the threshold dynamically
+on each retrain, it is fixed at 0.30 based on cost-benefit analysis. This
+prevents threshold drift between retraining runs and makes the system
+predictable in production.
 
-**sklearn Pipeline** — `FraudFeatureEngineer → StandardScaler → XGBClassifier`
-are chained into one object. This guarantees all three steps run in the
-correct order at inference time automatically — no manual coordination needed.
+**class_weight="balanced"** — tells Random Forest to weight fraud cases
+proportionally to the 15:1 class imbalance without oversampling.
 
-**Fixed OHE categories (`KNOWN_CATEGORIES`)** — Rather than using
-`pd.get_dummies()` which produces different columns across CV folds,
-we hardcode all possible category values. This guarantees identical feature
-columns at training, CV, and inference time.
+**sklearn Pipeline** — `FraudFeatureEngineer → StandardScaler → RandomForestClassifier`
+chained into one object. All three steps run in the correct order automatically
+at both training time and inference time.
 
-**Threshold tuning on OOF predictions** — The decision threshold is tuned
-to maximise F1 on out-of-fold predictions (not training data). This prevents
-threshold overfitting and gives an honest estimate of production performance.
+**Fixed OHE categories (`KNOWN_CATEGORIES`)** — hardcoded category lists
+prevent column mismatch across CV folds and at inference time.
 
-**model_meta.json** — Threshold, feature names, and CV metrics are stored
-alongside the model. The API reads this at startup so the threshold is always
+**HighClaims_NewVehicle interaction feature** — binary flag targeting the
+genuinely suspicious combination of multiple past claims on a new vehicle.
+Replaced the original Claims_x_VehicleAge multiplication which was ambiguous —
+high × high produced a large number for old vehicles with many claims which
+is actually normal behaviour.
+
+**model_meta.json** — threshold, feature names, and CV metrics stored
+alongside the model. The API reads this at startup so configuration is always
 consistent with the trained model.
 
 ---
