@@ -4,7 +4,7 @@ src/model_selection.py — Compare Models Before Committing to One
 This script should be run BEFORE train.py.
 
 We test three candidate models using cross-validation and pick the
-best one based on ROC-AUC and F1 on the fraud (minority) class.
+best one based on Recall on the fraud (minority) class.
 
 Models compared:
   1. Logistic Regression  — simple linear baseline
@@ -32,7 +32,7 @@ from sklearn.model_selection import StratifiedKFold, cross_val_predict
 from sklearn.metrics import (
     roc_auc_score, average_precision_score,
     classification_report, f1_score,
-    precision_score, recall_score,
+    precision_score, recall_score,precision_recall_curve,
 )
 
 # Try importing XGBoost — give a clear message if not installed
@@ -56,18 +56,6 @@ CV_FOLDS     = 5
 
 # ─────────────────────────────── Helpers ───────────────────────────────────
 
-def tune_threshold(y_true, y_prob):
-    """Find threshold that maximises F1 on the fraud class."""
-    from sklearn.metrics import precision_recall_curve
-    precisions, recalls, thresholds = precision_recall_curve(y_true, y_prob)
-    f1_scores = np.where(
-        (precisions + recalls) == 0, 0,
-        2 * precisions * recalls / (precisions + recalls),
-    )
-    best_idx = np.argmax(f1_scores[:-1])
-    return float(thresholds[best_idx])
-
-
 def evaluate_model(name, pipeline, X, y, cv):
     """
     Run cross-validated evaluation for one model.
@@ -84,8 +72,8 @@ def evaluate_model(name, pipeline, X, y, cv):
 
     elapsed = perf_counter() - t0
 
-    # Tune threshold on OOF probs
-    threshold  = tune_threshold(y.values, oof_probs)
+    # Threshold on OOF probs
+    threshold  = 0.3
     oof_preds  = (oof_probs >= threshold).astype(int)
 
     roc_auc    = roc_auc_score(y, oof_probs)
@@ -117,7 +105,7 @@ def print_results_table(results):
     print(f"  {'Model':<25} {'ROC-AUC':>8} {'Avg Prec':>9} {'F1':>7} {'Recall':>8} {'Prec':>7}")
     print("=" * 72)
     for r in results:
-        marker = "  ◀ best ROC-AUC" if r == results[0] else ""
+        marker = "  ◀ best Recall" if r == results[0] else ""
         print(
             f"  {r['model']:<25} "
             f"{r['roc_auc']:>8.4f} "
@@ -222,7 +210,7 @@ def run_model_selection():
         results.append(result)
 
     # Sort by ROC-AUC descending
-    results.sort(key=lambda r: r["roc_auc"], reverse=True)
+    results.sort(key=lambda r: r["recall"], reverse=True)
 
     # ── Print comparison table ───────────────────────────────────────────
     print_results_table(results)

@@ -3,19 +3,22 @@ src/train.py — Production Training Pipeline
 =============================================
 Builds a full sklearn Pipeline:
 
-    FraudFeatureEngineer  →  StandardScaler  →  XGBClassifier
+    FraudFeatureEngineer  →  StandardScaler  →  RandomForestClassifier
 
 Steps:
   1. Load raw data
   2. Run 5-fold cross-validation to get honest OOF metrics
-  3. Tune decision threshold on OOF predictions (maximises F1)
+  3. Set threshold
   4. Fit final model on full dataset
   5. Save pipeline + metadata to models/
 
-XGBoost was chosen after comparing all three models in model_selection.py:
-  - XGBoost      ROC-AUC 0.820  AP 0.204  Recall 67.6%
-  - RandomForest ROC-AUC 0.808  AP 0.182  Recall 65.9%
-  - LogisticReg  ROC-AUC 0.794  AP 0.160  Recall 54.1%
+Random Forest was chosen after comparing all three models in model_selection.py:
+  - Random Forest  ROC-AUC 0.806  Recall 95.6%  ← winner on recall
+  - XGBoost        ROC-AUC 0.812  Recall 72.5%
+  - LogisticReg    ROC-AUC 0.793  Recall 93.0%
+
+Recall is the priority metric — missing fraud costs $15,000 vs $200 for a false alarm.
+Threshold hardcoded at 0.30 based on cost-benefit analysis.
 
 Usage:
     python src/train.py
@@ -40,8 +43,8 @@ from sklearn.metrics import (
     confusion_matrix,
 )
 
-# ── XGBoost ────────────────────────────────────────────────────────────────
-from xgboost import XGBClassifier
+# ── RandomForest ───────────────────────────────────────────────────────────
+from sklearn.ensemble import RandomForestClassifier
 
 # ── Local ──────────────────────────────────────────────────────────────────
 sys.path.insert(0, str(Path(__file__).parent))
@@ -60,20 +63,7 @@ CV_FOLDS     = 5
 
 # ─────────────────────────────── Helpers ───────────────────────────────────
 
-def tune_threshold(y_true: np.ndarray, y_prob: np.ndarray) -> float:
-    """
-    Find the probability threshold that maximises F1 on the fraud class.
-    Uses OOF predictions so the threshold is never tuned on training data.
-    """
-    precisions, recalls, thresholds = precision_recall_curve(y_true, y_prob)
-    f1_scores = np.where(
-        (precisions + recalls) == 0,
-        0,
-        2 * precisions * recalls / (precisions + recalls),
-    )
-    best_idx = np.argmax(f1_scores[:-1])
-    return float(thresholds[best_idx])
-
+THRESHOLD = 0.30
 
 def print_metrics(y_true, y_pred, y_prob, label=""):
     """Print a full evaluation block."""
@@ -117,28 +107,18 @@ def train():
     # at both training time and inference time — no manual coordination needed.
     print("\n► Building Pipeline...")
     pipeline = Pipeline([
-        ("features", FraudFeatureEngineer()),
+    ("features", FraudFeatureEngineer()),
+    ("scaler",   StandardScaler()),
+    ("model",    RandomForestClassifier(
+        n_estimators     = 400,
+        max_depth        = 12,
+        min_samples_leaf = 5,
+        class_weight     = "balanced",
+        random_state     = RANDOM_STATE,
+        n_jobs           = -1,
+    )),
+])
 
-        ("scaler",   StandardScaler()),
-
-        ("model",    XGBClassifier(
-            # Tree structure
-            n_estimators      = 400,
-            max_depth         = 6,       # shallower than RF — XGB prefers this
-            # Learning rate
-            learning_rate     = 0.05,    # small steps → better generalisation
-            # Row and column subsampling per tree
-            subsample         = 0.8,
-            colsample_bytree  = 0.8,
-            # Class imbalance — weights fraud cases 16× heavier than legit
-            scale_pos_weight  = fraud_ratio,
-            # Optimise directly for precision-recall AUC during training
-            eval_metric       = "aucpr",
-            random_state      = RANDOM_STATE,
-            n_jobs            = -1,
-            verbosity         = 0,
-        )),
-    ])
 
     print("  Steps:")
     for name, step in pipeline.steps:
@@ -164,10 +144,11 @@ def train():
     # ── 4. Threshold tuning ─────────────────────────────────────────────────
     # Default 0.5 threshold is wrong for imbalanced data.
     # We find the value that maximises F1 on the fraud class.
-    threshold = tune_threshold(y.values, oof_probs)
-    oof_preds = (oof_probs >= threshold).astype(int)
+    oof_preds = (oof_probs >= THRESHOLD).astype(int)
+    print(f"  Fixed threshold : {THRESHOLD}")
+    print(f"  Fraud caught    : {oof_preds[y.values==1].sum()} / {y.sum()}")
+    print(f"  False alarms    : {((oof_preds==1) & (y.values==0)).sum()}")
 
-    print(f"  Best threshold : {threshold:.4f}")
     print_metrics(y, oof_preds, oof_probs, "Cross-Validated OOF Performance")
 
     # ── 5. Final fit on full dataset ────────────────────────────────────────
@@ -176,9 +157,9 @@ def train():
     pipeline.fit(X_raw, y)
 
     # Feature importances
-    xgb           = pipeline.named_steps["model"]
+    rf           = pipeline.named_steps["model"]
     feature_names = FraudFeatureEngineer().transform(X_raw).columns.tolist()
-    importances   = pd.Series(xgb.feature_importances_, index=feature_names)
+    importances   = pd.Series(rf.feature_importances_, index=feature_names)
     top_features  = importances.nlargest(15)
 
     print("\nTop 15 features by importance:")
@@ -191,24 +172,23 @@ def train():
     joblib.dump(pipeline, MODEL_PATH)
 
     meta = {
-        "model_type"       : "XGBClassifier",
-        "threshold"        : threshold,
-        "feature_names"    : feature_names,
-        "top_features"     : top_features.to_dict(),
-        "cv_roc_auc"       : round(float(roc_auc_score(y, oof_probs)), 4),
-        "cv_avg_precision" : round(float(average_precision_score(y, oof_probs)), 4),
-        "training_rows"    : len(X_raw),
-        "fraud_rate"       : round(float(y.mean()), 4),
-        "cv_folds"         : CV_FOLDS,
-        "xgb_params"       : {
-            "n_estimators"    : 400,
-            "max_depth"       : 6,
-            "learning_rate"   : 0.05,
-            "subsample"       : 0.8,
-            "colsample_bytree": 0.8,
-            "scale_pos_weight": fraud_ratio,
-        },
-    }
+    "model_type"       : "RandomForestClassifier",
+    "threshold"        : THRESHOLD,
+    "feature_names"    : feature_names,
+    "top_features"     : top_features.to_dict(),
+    "cv_roc_auc"       : round(float(roc_auc_score(y, oof_probs)), 4),
+    "cv_avg_precision" : round(float(average_precision_score(y, oof_probs)), 4),
+    "cv_recall"        : round(float((oof_preds[y.values==1]).sum() / y.sum()), 4),
+    "training_rows"    : len(X_raw),
+    "fraud_rate"       : round(float(y.mean()), 4),
+    "cv_folds"         : CV_FOLDS,
+    "rf_params"        : {
+        "n_estimators"    : 400,
+        "max_depth"       : 12,
+        "min_samples_leaf": 5,
+        "class_weight"    : "balanced",
+    },
+}
     with open(META_PATH, "w") as f:
         json.dump(meta, f, indent=2)
 
@@ -216,7 +196,8 @@ def train():
     print(f"✓ Metadata saved  → {META_PATH}")
     print(f"\n  ROC-AUC (CV)       : {meta['cv_roc_auc']}")
     print(f"  Avg Precision (CV) : {meta['cv_avg_precision']}")
-    print(f"  Threshold          : {threshold:.4f}")
+    print(f"  Recall (CV)        : {meta['cv_recall']:.1%}")
+    print(f"  Threshold          : {THRESHOLD}")
 
     return pipeline, meta
 
