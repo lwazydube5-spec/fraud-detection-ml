@@ -59,11 +59,9 @@ META_PATH    = MODEL_DIR / "model_meta.json"
 
 RANDOM_STATE = 42
 CV_FOLDS     = 5
-
+THRESHOLD = 0.30
 
 # ─────────────────────────────── Helpers ───────────────────────────────────
-
-THRESHOLD = 0.30
 
 def print_metrics(y_true, y_pred, y_prob, label=""):
     """Print a full evaluation block."""
@@ -143,7 +141,7 @@ def train():
 
     # ── 4. Threshold tuning ─────────────────────────────────────────────────
     # Default 0.5 threshold is wrong for imbalanced data.
-    # We find the value that maximises F1 on the fraud class.
+    # We fix the value of threshold to 0.3
     oof_preds = (oof_probs >= THRESHOLD).astype(int)
     print(f"  Fixed threshold : {THRESHOLD}")
     print(f"  Fraud caught    : {oof_preds[y.values==1].sum()} / {y.sum()}")

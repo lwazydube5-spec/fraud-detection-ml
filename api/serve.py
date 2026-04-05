@@ -178,7 +178,7 @@ class FraudModelServer:
 
     @staticmethod
     def _confidence(prob: float) -> str:
-        distance = abs(prob - 0.5)
+        distance = abs(prob - 0.3)
         if distance > 0.35: return "HIGH"
         if distance > 0.15: return "MEDIUM"
         return "LOW"
