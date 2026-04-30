@@ -278,7 +278,7 @@ the training fraud rate (5.99%).
 ## Screenshots
 
 ### API running locally
-![API running locally](screenshots/API%20running%20locally.png)
+![API running locally](screenshots/API_running_locally_RF.png)
 
 ### Docker container running
 ![Docker container running](screenshots/Docker%20container%20running.png)
