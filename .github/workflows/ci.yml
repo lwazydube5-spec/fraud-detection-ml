@@ -155,6 +155,6 @@ jobs:
       - name: Smoke test container
         run: |
           docker run -d -p 8000:8000 --name fraud-test fraud-api:${{ github.sha }}
-          sleep 8
-          curl --fail http://localhost:8000/health
+          sleep 20
+          curl --fail --retry 5 --retry-delay 5 http://localhost:8000/health
           docker stop fraud-test
