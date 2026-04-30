@@ -23,6 +23,8 @@ import time
 import logging
 from pathlib import Path
 from typing import Optional
+import shap
+import numpy as np
 
 import sys                                                         
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))  
@@ -187,6 +189,7 @@ class FraudModelServer:
 # ─────────────────────────────── FastAPI app ───────────────────────────────
 
 model_server = FraudModelServer()
+explainer = None    # initialised at startup
 
 app = FastAPI(
     title="Insurance Fraud Detection API",
@@ -207,6 +210,11 @@ async def startup_event():
     """Load model into memory once at startup — not on first request."""
     model_server.load()
 
+    # Initialise SHAP explainer
+    global explainer
+    rf_model = model_server.pipeline.named_steps["model"]
+    explainer = shap.TreeExplainer(rf_model)
+    logger.info("SHAP explainer initialised")
 
 @app.get("/health")
 async def health():
@@ -257,4 +265,65 @@ async def predict_batch(request: BatchRequest):
         return model_server.predict_batch([c.model_dump() for c in request.claims])
     except Exception as e:
         logger.error(f"Batch prediction error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.post("/explain")
+def explain(claim: ClaimInput):
+    """
+    Score a claim and explain why — which features drove the prediction.
+    Returns top 5 features by SHAP value with direction and impact.
+    """
+    try:
+        t0 = time.time()
+
+        # score the claim
+        df        = pd.DataFrame([claim.dict()])
+        prob      = float(model_server.pipeline.predict_proba(df)[0, 1])
+        predicted = int(prob >= model_server.threshold)
+
+        # get transformed features for SHAP
+        eng      = model_server.pipeline.named_steps["features"]
+        scaler   = model_server.pipeline.named_steps["scaler"]
+        X_eng    = eng.transform(df)
+        X_scaled = scaler.transform(X_eng)
+
+        # calculate SHAP values
+        shap_vals     = explainer.shap_values(X_scaled)
+        feature_names = X_eng.columns.tolist()
+
+        # Random Forest TreeExplainer returns array of shape (n_samples, n_features, n_classes)
+        # or a list of two arrays [legit_shaps, fraud_shaps]
+        # handle both cases safely
+        if isinstance(shap_vals, list):
+            # list format — take fraud class (index 1), first sample (index 0)
+            fraud_shaps = np.array(shap_vals[1][0])
+        elif shap_vals.ndim == 3:
+            # 3D array — shape (n_samples, n_features, n_classes)
+            fraud_shaps = shap_vals[0, :, 1]
+        elif shap_vals.ndim == 2:
+            # 2D array — shape (n_samples, n_features)
+            fraud_shaps = shap_vals[0]
+        else:
+            fraud_shaps = shap_vals
+
+        # build feature impact list sorted by absolute impact
+        impacts = sorted([
+            {
+                "feature"   : feature_names[i],
+                "impact"    : round(abs(float(fraud_shaps[i])), 4),
+                "direction" : "increases_fraud" if fraud_shaps[i] > 0 else "decreases_fraud",
+                "shap_value": round(float(fraud_shaps[i]), 4),
+            }
+            for i in range(len(feature_names))
+        ], key=lambda x: x["impact"], reverse=True)
+
+        return {
+            "fraud_probability" : round(prob, 4),
+            "fraud_predicted"   : bool(predicted),
+            "risk_tier"         : model_server._risk_tier(prob),
+            "top_reasons"       : impacts[:5],
+            "inference_ms"      : round((time.time() - t0) * 1000, 2),
+        }
+
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
