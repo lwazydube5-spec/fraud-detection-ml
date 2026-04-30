@@ -2,8 +2,7 @@
 # Insurance Fraud Detection — Production ML System
 
 An end-to-end machine learning system that detects fraudulent insurance
-claims in real time. Built with Python, scikit-learn, Random Forest, FastAPI,
-and Docker.
+claims in real time. Built with Python, scikit-learn, Random Forest, FastAPI,Docker,ECR and Sagemaker.
 
 ---
 
@@ -210,10 +209,11 @@ catching fraud saves $15,000 per case vs $200 per false alarm investigation.
 fraud detection — missing fraud costs $15,000 vs $200 for a false alarm —
 Random Forest was selected despite XGBoost having a marginally higher ROC-AUC.
 
-**Hardcoded threshold at 0.30** — rather than tuning the threshold dynamically
-on each retrain, it is fixed at 0.30 based on cost-benefit analysis. This
-prevents threshold drift between retraining runs and makes the system
-predictable in production.
+**Hardcoded threshold at 0.30** — justified by cost-benefit analysis
+in `threshold_analysis.py`. At threshold 0.30 the model catches 878
+fraud cases producing $11.7M net benefit per batch after investigation
+costs. Lower thresholds catch more fraud but exceed investigation
+capacity. See `threshold_analysis.py` for the full analysis.
 
 **class_weight="balanced"** — tells Random Forest to weight fraud cases
 proportionally to the 15:1 class imbalance without oversampling.
