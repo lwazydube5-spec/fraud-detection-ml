@@ -100,6 +100,7 @@ curl http://localhost:8000/health
 |--------|-------------------|------------------------------------|
 | POST   | `/predict`        | Score a single claim               |
 | POST   | `/predict/batch`  | Score up to 1,000 claims at once   |
+| POST   | `/explain`        | Score a claim + SHAP explanation   |
 | GET    | `/health`         | Health check + model metadata      |
 | GET    | `/metrics`        | CV performance metrics             |
 | GET    | `/docs`           | Interactive API docs (Swagger UI)  |
@@ -150,6 +151,24 @@ print(response.json())
   "confidence": "MEDIUM",
   "model_version": "RandomForestClassifier",
   "inference_ms": 4.2
+}
+```
+
+### Example explain response
+
+```json
+{
+  "fraud_probability": 0.4673,
+  "fraud_predicted": true,
+  "risk_tier": "HIGH",
+  "top_reasons": [
+    {"feature": "Fault",               "impact": 0.0465, "direction": "increases_fraud"},
+    {"feature": "BasePolicy_Liability","impact": 0.0302, "direction": "increases_fraud"},
+    {"feature": "PolicyType_Sedan - Collision", "impact": 0.0256, "direction": "decreases_fraud"},
+    {"feature": "PolicyType_Sedan - Liability", "impact": 0.0249, "direction": "increases_fraud"},
+    {"feature": "AgeOfVehicle",        "impact": 0.0194, "direction": "decreases_fraud"}
+  ],
+  "inference_ms": 95.62
 }
 ```
 
@@ -235,6 +254,12 @@ is actually normal behaviour.
 alongside the model. The API reads this at startup so configuration is always
 consistent with the trained model.
 
+**SHAP explainability** — the `/explain` endpoint returns the top 5 
+features that drove each individual prediction using SHAP TreeExplainer. 
+In insurance, regulators often require automated decisions to be 
+explainable. SHAP gives investigators a clear reason why each claim 
+was flagged — which features increased or decreased the fraud probability.
+
 ---
 
 ## Running tests
@@ -258,15 +283,17 @@ GitHub Actions runs on every push to `main`:
 
 ## Extending the system
 
-**Swap the model** — replace `XGBClassifier` in `train.py` with any
+**Swap the model** — replace `RandomForestClassifier` in `train.py` with any
 sklearn-compatible model. The Pipeline and all other files stay unchanged.
 
-**Add SHAP explanations** — explainability for individual predictions:
-```python
-import shap
-explainer = shap.TreeExplainer(pipeline.named_steps["model"])
-shap_values = explainer.shap_values(X_test)
-```
+**SHAP explainability** — already implemented via the `/explain` endpoint.
+Returns the top 5 features driving each individual prediction with direction
+and impact. Useful for regulatory compliance where automated decisions must
+be explainable. See `api/serve.py` for implementation.
+
+**Threshold analysis** — run `src/threshold_analysis.py` to see how recall,
+precision, fraud caught, and false alarms change at every possible threshold.
+Used to justify the hardcoded threshold of 0.30 based on cost-benefit analysis.
 
 **Monitor for drift** — log `fraud_probability` per prediction to a
 time-series store. Alert when the rolling mean drifts significantly from
