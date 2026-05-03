@@ -56,7 +56,7 @@ pip install -r requirements-dev.txt
 ### 2. Add the data
 
 Download `fraud_data.csv` and place it at `data/fraud_data.csv`.
-The dataset is available on [Kaggle — Vehicle Insurance Fraud Detection](https://www.kaggle.com).
+The dataset is available on [Kaggle — Vehicle Insurance Fraud Detection](https://https://www.kaggle.com/code/khushisharma1009/vehicle-claim-fraud-detection/input).
 
 ### 3. Run the ML pipeline
 
@@ -260,24 +260,7 @@ In insurance, regulators often require automated decisions to be
 explainable. SHAP gives investigators a clear reason why each claim 
 was flagged — which features increased or decreased the fraud probability.
 
----
 
-## Running tests
-
-```bash
-pip install -r requirements-dev.txt
-pytest tests/ -v --cov=src
-```
-
----
-
-## CI/CD
-
-GitHub Actions runs on every push to `main`:
-
-1. **Test** — installs deps, trains a model, runs pytest
-2. **Build** — builds Docker image, starts container, hits `/health`
-3. **Retrain** — manual trigger only, uploads model as GitHub artifact
 
 ---
 
@@ -302,13 +285,61 @@ the training fraud rate (5.99%).
 **Retrain on new data** — re-run `src/train.py`. The fixed
 `KNOWN_CATEGORIES` ensures backward-compatible feature schema.
 
+---
+
+## Running tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest tests/ -v --cov=src
+```
+
+---
+
+## CI/CD
+
+GitHub Actions runs on every push to `main`:
+
+1. **Test** — installs deps, trains a model, runs pytest
+2. **Build** — builds Docker image, starts container, hits `/health`
+3. **Retrain** — manual trigger only, uploads model as GitHub artifact
+
 ## Screenshots
 
-### API running locally
+### API
+
 ![API running locally](screenshots/API_running_locally_RF.png)
 
-### Docker container running
+![Metrics endpoint](screenshots/Metrics.png)
+
+![Metrics endpoint 2](screenshots/Metrics2.png)
+
+### Docker
+
 ![Docker container running](screenshots/Docker%20container%20running.png)
 
-### SageMaker endpoint InService
+### AWS ECR
+
+![ECR image pushed](screenshots/ECR.png)
+
+### AWS SageMaker
+
 ![SageMaker endpoint InService](screenshots/SageMaker%20endpoint%20InService.png)
+
+### Data Capture
+
+![Data capture enabled](screenshots/DataCapture.png)
+
+![S3 data capture files](screenshots/S3_data_capture.png)
+
+![Data capture baseline](screenshots/Data_capture_baseline.png)
+
+### Model Monitor
+
+![Model Monitor setup](screenshots/ModelMonitorSetUp.png)
+
+### CloudWatch
+
+![CloudWatch logs — live predictions](screenshots/Cloudwatch_logs_Sagemaker.png)
+
+![CloudWatch SageMaker metrics](screenshots/Cloudwatch_Sagemaker.png)
